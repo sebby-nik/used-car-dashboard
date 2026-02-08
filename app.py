@@ -262,7 +262,10 @@ def require_login() -> str:
 def main() -> None:
     st.set_page_config(page_title="Partner Renewals Dashboard", layout="wide")
     viewer_name = require_login()
-    st.title("Partner Renewals Dashboard")
+    st.markdown(
+        "<h1 style='color:#1f6feb;'>Partner Renewals Dashboard</h1>",
+        unsafe_allow_html=True,
+    )
     st.caption(f"Focused view for sheet: {PARTNER_SHEET}")
 
     st.sidebar.header("Data Source")
