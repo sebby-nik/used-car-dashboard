@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +19,8 @@ OTHER_COHORT = "All Other Partners"
 DASHBOARD_PIN = os.environ.get("DASHBOARD_PIN", "1234")
 ALLOWED_NAME = "Alyx"
 ALLOWED_PIN = "1020"
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
+LOCKOUT_SECONDS = int(os.environ.get("LOCKOUT_SECONDS", "900"))
 
 
 @st.cache_data(show_spinner=False)
@@ -262,12 +265,26 @@ def require_login() -> str:
         st.session_state["authenticated"] = False
     if "viewer_name" not in st.session_state:
         st.session_state["viewer_name"] = ""
+    if "failed_attempts" not in st.session_state:
+        st.session_state["failed_attempts"] = 0
+    if "lockout_until" not in st.session_state:
+        st.session_state["lockout_until"] = 0.0
 
     if st.session_state["authenticated"]:
         return st.session_state["viewer_name"]
 
     st.title("Dashboard Login")
     st.caption("Enter your name and PIN to access the dashboard.")
+
+    now = time.time()
+    if now < st.session_state["lockout_until"]:
+        remaining = int(st.session_state["lockout_until"] - now)
+        mins, secs = divmod(remaining, 60)
+        st.error(
+            f"Too many failed attempts. Try again in {mins:02d}:{secs:02d}."
+        )
+        st.stop()
+
     with st.form("login_form", clear_on_submit=False):
         name = st.text_input("Name")
         pin = st.text_input("PIN", type="password")
@@ -277,10 +294,21 @@ def require_login() -> str:
         if not name.strip():
             st.error("Name is required.")
         elif name.strip() != ALLOWED_NAME or pin != ALLOWED_PIN:
-            st.error("Invalid name or PIN.")
+            st.session_state["failed_attempts"] += 1
+            attempts_left = MAX_LOGIN_ATTEMPTS - st.session_state["failed_attempts"]
+            if attempts_left <= 0:
+                st.session_state["lockout_until"] = time.time() + LOCKOUT_SECONDS
+                st.session_state["failed_attempts"] = 0
+                st.error(
+                    "Invalid name or PIN. Too many failed attempts; login is temporarily locked."
+                )
+            else:
+                st.error(f"Invalid name or PIN. Attempts remaining: {attempts_left}.")
         else:
             st.session_state["authenticated"] = True
             st.session_state["viewer_name"] = ALLOWED_NAME
+            st.session_state["failed_attempts"] = 0
+            st.session_state["lockout_until"] = 0.0
             st.rerun()
 
     st.stop()
