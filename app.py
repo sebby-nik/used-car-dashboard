@@ -60,13 +60,18 @@ def resolve_renewal_column(df: pd.DataFrame) -> str | None:
 
 @st.cache_data(show_spinner=False, ttl=60)
 def read_partner_sheet_live(
-    sheet_id: str, credentials_path: str | None = None, credentials_json: str | None = None
+    sheet_id: str,
+    credentials_path: str | None = None,
+    credentials_json: str | None = None,
+    credentials_info: dict | None = None,
 ) -> pd.DataFrame:
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
     ]
-    if credentials_json:
+    if credentials_info:
+        creds = Credentials.from_service_account_info(credentials_info, scopes=scopes)
+    elif credentials_json:
         creds_info = json.loads(credentials_json)
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
     elif credentials_path:
@@ -284,6 +289,7 @@ def main() -> None:
         credentials_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or st.secrets.get(
             "GOOGLE_SERVICE_ACCOUNT_JSON", ""
         )
+        credentials_info = st.secrets.get("gcp_service_account")
         default_creds = os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS",
             "/Users/sebmargolis/Desktop/used-car-dashboard/secrets/google-service-account.json",
@@ -293,7 +299,7 @@ def main() -> None:
         creds_mode = st.sidebar.radio(
             "Credentials source",
             ["Streamlit/Env JSON", "Local JSON file path"],
-            index=0 if credentials_json else 1,
+            index=0 if (credentials_json or credentials_info) else 1,
         )
         creds_path = None
         if creds_mode == "Local JSON file path":
@@ -312,9 +318,9 @@ def main() -> None:
             if not creds_file.exists():
                 st.error(f"Credentials file not found: {creds_file}")
                 st.stop()
-        elif not credentials_json:
+        elif not (credentials_json or credentials_info):
             st.error(
-                "Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment or Streamlit secrets."
+                "Missing credentials in Streamlit secrets. Add GOOGLE_SERVICE_ACCOUNT_JSON or [gcp_service_account]."
             )
             st.stop()
 
@@ -323,6 +329,7 @@ def main() -> None:
                 sheet_id.strip(),
                 credentials_path=str(creds_file) if creds_file else None,
                 credentials_json=credentials_json or None,
+                credentials_info=dict(credentials_info) if credentials_info else None,
             )
         except Exception as exc:
             st.error(f"Could not read live Google Sheet: {exc}")
