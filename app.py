@@ -140,6 +140,26 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.header("Filters")
 
     filtered = df.copy()
+    risk_col = resolve_column(filtered, "Risk banding")
+    if risk_col:
+        risk_values = (
+            filtered[risk_col]
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        risk_options = sorted(risk_values)
+        selected_risk = st.sidebar.multiselect(
+            "Risk banding", risk_options, default=risk_options
+        )
+        if selected_risk:
+            filtered = filtered[
+                filtered[risk_col].astype(str).str.strip().isin(selected_risk)
+            ]
+
     if "CPL or Flat Rate" in filtered.columns:
         options = sorted(filtered["CPL or Flat Rate"].dropna().astype(str).unique().tolist())
         selected = st.sidebar.multiselect("CPL or Flat Rate", options, default=options)
