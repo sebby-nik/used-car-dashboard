@@ -200,6 +200,13 @@ def display_partner_table(df: pd.DataFrame, title: str, download_key: str) -> No
     ]
     columns = [c for c in preferred_cols if c in df.columns]
     table = df[columns].copy()
+    if (
+        "Monthly subscription cost numeric" in df.columns
+        and "Monthly subscription cost" in table.columns
+    ):
+        table["Monthly subscription cost"] = pd.to_numeric(
+            df.loc[table.index, "Monthly subscription cost numeric"], errors="coerce"
+        )
     if "Renewal Date (Working)" in table.columns:
         table["Renewal Date (Working)"] = pd.to_datetime(
             table["Renewal Date (Working)"], errors="coerce"
