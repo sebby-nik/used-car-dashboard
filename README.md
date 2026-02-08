@@ -59,3 +59,15 @@ In the sidebar:
 - The app expects `Dealership Group Name` and `Actual renewal date` columns.
 - Renewal buckets are non-overlapping: `0-30`, `31-60`, `61-90` days.
 - Local Excel can still be used from the sidebar source toggle.
+
+
+## Login
+
+The dashboard now requires a name + PIN.
+Set the PIN before running:
+
+```bash
+export DASHBOARD_PIN="your_pin_here"
+```
+
+If not set, default PIN is `1234`.

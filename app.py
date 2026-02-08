@@ -14,6 +14,9 @@ RENEWAL_COLUMN = "Actual renewal date"
 REQUIRED_COLUMNS = {"Dealership Group Name", RENEWAL_COLUMN}
 FACEBOOK_COHORT = "Facebook Group cohort"
 OTHER_COHORT = "All Other Partners"
+DASHBOARD_PIN = os.environ.get("DASHBOARD_PIN", "1234")
+ALLOWED_NAME = "Alyx"
+ALLOWED_PIN = "1020"
 
 
 @st.cache_data(show_spinner=False)
@@ -213,12 +216,48 @@ def format_currency(value: float) -> str:
     return f"£{round(value):,}"
 
 
+def require_login() -> str:
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+    if "viewer_name" not in st.session_state:
+        st.session_state["viewer_name"] = ""
+
+    if st.session_state["authenticated"]:
+        return st.session_state["viewer_name"]
+
+    st.title("Dashboard Login")
+    st.caption("Enter your name and PIN to access the dashboard.")
+    with st.form("login_form", clear_on_submit=False):
+        name = st.text_input("Name")
+        pin = st.text_input("PIN", type="password")
+        submit = st.form_submit_button("Login")
+
+    if submit:
+        if not name.strip():
+            st.error("Name is required.")
+        elif name.strip() != ALLOWED_NAME or pin != ALLOWED_PIN:
+            st.error("Invalid name or PIN.")
+        else:
+            st.session_state["authenticated"] = True
+            st.session_state["viewer_name"] = ALLOWED_NAME
+            st.rerun()
+
+    st.stop()
+
+
 def main() -> None:
     st.set_page_config(page_title="Partner Renewals Dashboard", layout="wide")
+    viewer_name = require_login()
     st.title("Partner Renewals Dashboard")
     st.caption(f"Focused view for sheet: {PARTNER_SHEET}")
 
     st.sidebar.header("Data Source")
+    st.sidebar.markdown(f"Signed in as: **{viewer_name}**")
+    if st.sidebar.button("Logout"):
+        st.session_state["authenticated"] = False
+        st.session_state["viewer_name"] = ""
+        st.rerun()
+
     source = st.sidebar.radio(
         "Source",
         ["Google Sheet (Live)", "Local Excel"],
