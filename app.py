@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -58,12 +59,20 @@ def resolve_renewal_column(df: pd.DataFrame) -> str | None:
 
 
 @st.cache_data(show_spinner=False, ttl=60)
-def read_partner_sheet_live(sheet_id: str, credentials_path: str) -> pd.DataFrame:
+def read_partner_sheet_live(
+    sheet_id: str, credentials_path: str | None = None, credentials_json: str | None = None
+) -> pd.DataFrame:
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
     ]
-    creds = Credentials.from_service_account_file(credentials_path, scopes=scopes)
+    if credentials_json:
+        creds_info = json.loads(credentials_json)
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+    elif credentials_path:
+        creds = Credentials.from_service_account_file(credentials_path, scopes=scopes)
+    else:
+        raise ValueError("No Google service account credentials provided.")
     client = gspread.authorize(creds)
     ws = client.open_by_key(sheet_id).worksheet(PARTNER_SHEET)
     values = ws.get_all_values()
@@ -268,27 +277,53 @@ def main() -> None:
     as_of_date = pd.Timestamp(as_of).normalize()
 
     if source == "Google Sheet (Live)":
+        default_sheet_id = (
+            os.environ.get("GOOGLE_SHEET_ID")
+            or st.secrets.get("GOOGLE_SHEET_ID", "")
+        )
+        credentials_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or st.secrets.get(
+            "GOOGLE_SERVICE_ACCOUNT_JSON", ""
+        )
         default_creds = os.environ.get(
             "GOOGLE_APPLICATION_CREDENTIALS",
             "/Users/sebmargolis/Desktop/used-car-dashboard/secrets/google-service-account.json",
         )
-        default_sheet_id = os.environ.get("GOOGLE_SHEET_ID", "")
-        creds_path = st.sidebar.text_input("Credentials JSON path", value=default_creds)
+
         sheet_id = st.sidebar.text_input("Google Sheet ID", value=default_sheet_id)
+        creds_mode = st.sidebar.radio(
+            "Credentials source",
+            ["Streamlit/Env JSON", "Local JSON file path"],
+            index=0 if credentials_json else 1,
+        )
+        creds_path = None
+        if creds_mode == "Local JSON file path":
+            creds_path = st.sidebar.text_input("Credentials JSON path", value=default_creds)
         if st.sidebar.button("Refresh live data now"):
             st.cache_data.clear()
             st.rerun()
 
-        creds_file = Path(creds_path).expanduser()
-        if not creds_file.exists():
-            st.error(f"Credentials file not found: {creds_file}")
-            st.stop()
         if not sheet_id.strip():
             st.error("Google Sheet ID is required.")
             st.stop()
 
+        creds_file = None
+        if creds_mode == "Local JSON file path":
+            creds_file = Path(creds_path).expanduser()
+            if not creds_file.exists():
+                st.error(f"Credentials file not found: {creds_file}")
+                st.stop()
+        elif not credentials_json:
+            st.error(
+                "Missing GOOGLE_SERVICE_ACCOUNT_JSON in environment or Streamlit secrets."
+            )
+            st.stop()
+
         try:
-            df = read_partner_sheet_live(sheet_id.strip(), str(creds_file))
+            df = read_partner_sheet_live(
+                sheet_id.strip(),
+                credentials_path=str(creds_file) if creds_file else None,
+                credentials_json=credentials_json or None,
+            )
         except Exception as exc:
             st.error(f"Could not read live Google Sheet: {exc}")
             st.stop()
